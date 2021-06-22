@@ -1,0 +1,103 @@
+---
+title: "HW_2"
+author: "Austin Pesina"
+date: "3/15/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("~/Intro_to_R/HW_2")
+library(tidyverse)
+library(describedata)
+country <- readr::read_rds("country_info.rds")
+tourism <- readr::read_rds("tourism.rds")
+```
+
+
+#1. Remove the columns _1995through _2013. 
+#2. Create the Country_Name and Tourism_Type columns from values in the Country column. Valid values for Tourism_Typeare Inbound tourism and Outbound tourism. 
+#3. Run your code and view the cleaned_tourismtable so far. Remove rows that contain only the country name and tourism type information
+#4. In the Series column, convert values to uppercase and convert ".." or" " to missing value. 
+
+``` {r remove}
+options(scipen = 999)['digits']
+tourism1 <- tourism %>%
+  select("A", "COUNTRY", "Series", "_2014") %>%
+  mutate(Country_Name = case_when(A != "NA" ~ paste0(tourism$COUNTRY))) %>% 
+  fill(Country_Name, .direction = "down") %>%
+  mutate(Tourism_Type = ifelse (grepl("Inbound", COUNTRY), "Inbound Tourism",
+                        ifelse(grepl("Outbound", COUNTRY), "Outbound Tourism", NA))) %>%
+  fill(Tourism_Type, .direction="down") %>%
+  
+  filter(Country_Name != COUNTRY) %>%
+  filter(COUNTRY !=  str_to_sentence(Tourism_Type)) 
+
+tourism2 <- tourism1 %>%
+  mutate(Series = str_to_upper(Series, locale="en")) %>%
+  mutate(Series = na_if(Series, "")) %>%
+  mutate(Series = na_if(Series, "..")) %>%
+  rename(Y2014 = `_2014`) %>%
+  mutate(Y2014 = as.numeric(na_if(Y2014, ".."))) 
+
+tourism3 <- tourism2 %>%
+  mutate(Y2014 = case_when(
+                    str_detect(COUNTRY, "Mn") ~ as.numeric(paste0(Y2014))*1000000,
+                    str_detect(COUNTRY, "Thousands") ~ as.numeric(paste0(Y2014))*1000,
+                    T ~ as.numeric(Y2014)))
+
+
+tourism4 <- tourism3 %>%
+  mutate(Category = case_when(COUNTRY == "Arrivals - Thousands" ~ "Arivals",
+                              COUNTRY == "Departures - Thousands" ~ "Departures",
+                              COUNTRY == "Travel - US$ Mn" ~ "Travel - US$",
+                              COUNTRY == "Passenger transport - US$ Mn" ~ "Passenger transport - US$",
+                              COUNTRY == "Tourism expenditure in other countries - US$ Mn" ~ 
+                                         "Tourism expenditure in other countries - US$",
+                              COUNTRY == "Tourism expenditure in the country - US$ Mn" ~ 
+                                         "Tourism expenditure in the country - US$"))
+                                          
+
+cleaned_tourism <- tourism4 %>%
+  select(Country_Name, Tourism_Type, Category, Series, Y2014)
+```
+
+
+```{r}
+country_info <- country %>%
+  mutate(Continent_Name = case_when(Continent == 1 ~ "North America",
+                                    Continent == 2 ~ "South America",
+                                    Continent == 3 ~ "Europe",
+                                    Continent == 4 ~ "Africa",
+                                    Continent == 5 ~ "Asia",
+                                    Continent == 6 ~ "Oceania",
+                                    Continent == 7 ~ "Antarctica"))
+```
+
+
+```{r}
+final_tourism <-  left_join(cleaned_tourism, country_info, by = c("Country_Name" = "Country"))
+
+NoCountryFound <- anti_join(cleaned_tourism, country_info, by =c("Country_Name" = "Country")) %>%
+  select(Country_Name) %>%
+  filter(!duplicated(Country_Name))
+```
+
+```{r}
+mean_arrivals <- final_tourism %>%
+  filter(Category == "Arivals") %>%
+  group_by(Continent_Name) %>%
+  summarise_at(vars(Y2014), funs(mean(., na.rm=T)))
+
+mean_arrivals
+
+
+
+other_countries <- final_tourism %>%
+  filter(str_detect(Category, "Tourism expenditure in other countries")) %>%
+  summarise_at(vars(Y2014), funs(mean(., na.rm=T)))
+
+other_countries
+
+mean(other_countries$Y2014, na.rm=T)
+```
